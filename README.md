@@ -39,122 +39,7 @@ _No response_
 
 Owner should be specified in the init payload by the user similarly to how its done for the budget contracts [here](https://github.com/sherlock-audit/2024-06-boost-aa-wallet/blob/d9f597776cc2d20fbb19ffb1f7731126cf3b6210/boost-protocol/packages/evm/contracts/budgets/SimpleBudget.sol#L54)
 
-# Issue H-2: `incentiveId_` is not included in the hash that is signed by the validator will allow anyone to claim for a user 
-
-Source: https://github.com/sherlock-audit/2024-06-boost-aa-wallet-judging/issues/230 
-
-## Found by 
-iamnmt, ke1caM, sakshamguruji
-### Summary
-
-`incentiveId_` is not included in the hash that is signed by the validator will allow anyone to claim for a user.
-
-### Root Cause
-
-`incentiveId_` is not included in the hash that is signed by the validator
-
-https://github.com/sherlock-audit/2024-06-boost-aa-wallet/blob/78930f2ed6570f30e356b5529bd4bcbe5194eb8b/boost-protocol/packages/evm/contracts/BoostCore.sol#L166
-
-```solidity
-    function claimIncentiveFor(
-        uint256 boostId_,
->>      uint256 incentiveId_,
-        address referrer_,
-        bytes calldata data_,
-        address claimant
-    ) public payable nonReentrant {
-        BoostLib.Boost storage boost = _boosts[boostId_];
-        if (msg.value < claimFee) revert BoostError.InsufficientFunds(address(0), msg.value, claimFee);
-        _routeClaimFee(boost, referrer_);
-
-        // wake-disable-next-line reentrancy (false positive, function is nonReentrant)
->>      if (!boost.validator.validate(boostId_, incentiveId_, claimant, data_)) revert BoostError.Unauthorized();
-        if (!boost.incentives[incentiveId_].claim(claimant, data_)) {
-            revert BoostError.ClaimFailed(claimant, data_);
-        }
-    }
-```
-
-https://github.com/sherlock-audit/2024-06-boost-aa-wallet/blob/78930f2ed6570f30e356b5529bd4bcbe5194eb8b/boost-protocol/packages/evm/contracts/validators/SignerValidator.sol#L61
-
-```solidity
-    function validate(uint256 boostId, uint256 incentiveId, address claimant, bytes calldata claimData)
-        external
-        override
-        returns (bool)
-    {
-        if (msg.sender != _validatorCaller) revert BoostError.Unauthorized();
-
-        (BoostClaimData memory claim) = abi.decode(claimData, (BoostClaimData));
-        (SignerValidatorInputParams memory validatorData) =
-            abi.decode(claim.validatorData, (SignerValidatorInputParams));
-
->>      bytes32 hash = hashSignerData(boostId, validatorData.incentiveQuantity, claimant, claim.incentiveData);
-
-        if (uint256(validatorData.incentiveQuantity) <= incentiveId) {
-            revert BoostError.InvalidIncentive(validatorData.incentiveQuantity, incentiveId);
-        }
-        if (!signers[validatorData.signer]) revert BoostError.Unauthorized();
-
-        // Mark the incentive as claimed to prevent replays
-        // checks internally if the incentive has already been claimed
-        _used.setOrThrow(hash, incentiveId);
-
-        // Return the result of the signature check
-        // no need for a sig prefix since it's encoded by the EIP712 lib
-        return validatorData.signer.isValidSignatureNow(hash, validatorData.signature);
-    }
-```
-
-### Internal pre-conditions
-
-_No response_
-
-### External pre-conditions
-
-_No response_
-
-### Attack Path
-
-1. Alice calls to `claimIncentive` with 
-   - `boostId_ = 0`
-   - `incentiveId_ = 2`
-   - `referrer_ = address(0)`
-   - `data_ = 0xdeadbeef`
-   - `validatorData.incentiveQuantity = 3`
-2. The attacker uses the same `data_` to call to `claimIncentiveFor` with:
-   - `boostId_ = 0`
-   - `incentiveId_ = 1`
-   - `referrer_ = address(0)`
-   - `data_ = 0xdeadbeef`
-   - `validatorData.incentiveQuantity = 3`
-   - `claimant = address(Alice)`
-
-Since the hash that is validated in `SignerValidator#validate` does not include `incentiveId_`, the attacker's transaction will pass this validation
-
-https://github.com/sherlock-audit/2024-06-boost-aa-wallet/blob/78930f2ed6570f30e356b5529bd4bcbe5194eb8b/boost-protocol/packages/evm/contracts/validators/SignerValidator.sol#L61
-
-Moreover, by specifying `incentiveId_ = 1`, the check of `incentiveId` against `validatorData.incentiveQuantity` is also passed
-
-https://github.com/sherlock-audit/2024-06-boost-aa-wallet/blob/78930f2ed6570f30e356b5529bd4bcbe5194eb8b/boost-protocol/packages/evm/contracts/validators/SignerValidator.sol#L63C21-L63C52
-
-As a result, the attacker successfully claim the incentive with `id = 1` for the user. Whereas the user intention is only claiming the incentive with `id = 2`.
-
-### Impact
-
-Although the incentive that is claimed by the attacker will be transferred to the user. Note that, the attacker does not steal the incentive of the user. But the attacker claims the incentive that is not expected to be claimed by the user.
-
-This behavior will cause problem in the `CGDAIncentive` contract. For this type of incentive, the longer the user waits the more incentive the user can claim. By launching this attack, the attacker forces the user to claim early in this type of incentive, and the user can not claim again in the future. In this case, the user will lose out on the incentive, because the attacker claims early for the user.
-
-### PoC
-
-_No response_
-
-### Mitigation
-
-Include `incentiveId_` in the hash that is signed by the validator.
-
-# Issue H-3: IncentiveBits.setOrThrow() will revert, leading to a DoS 
+# Issue H-2: IncentiveBits.setOrThrow() will revert, leading to a DoS 
 
 Source: https://github.com/sherlock-audit/2024-06-boost-aa-wallet-judging/issues/263 
 
@@ -213,7 +98,62 @@ function setOrThrow(IncentiveMap storage bitmap, bytes32 hash, uint256 incentive
 .
 ```
 
-# Issue M-1: Boost creator can collect all the fees by setting referralFee to 9_000 and give claimants his address as referrer_ address 
+# Issue M-1: Both block.prevrandao and block.timestamp are not reliably source of randonness 
+
+Source: https://github.com/sherlock-audit/2024-06-boost-aa-wallet-judging/issues/106 
+
+## Found by 
+0x539.eth, 0xSecuri, 0xloophole, 4b, Atharv, Japy69, Okazaki, Pheonix, ctf\_sec, denzi\_, ge6a, haxagon, oxelmiguel, pwning\_dev, sakshamguruji, tinnohofficial
+## Summary
+
+Both block.prevrandao and block.timestamp are not reliably source of randonness
+
+## Vulnerability Detail
+
+In the ERC20Incentive.sol, 
+
+```solidity
+    function drawRaffle() external override onlyOwner {
+        if (strategy != Strategy.RAFFLE) revert BoostError.Unauthorized();
+
+        LibPRNG.PRNG memory _prng = LibPRNG.PRNG({state: block.prevrandao + block.timestamp});
+
+        address winnerAddress = entries[_prng.next() % entries.length];
+
+        asset.safeTransfer(winnerAddress, reward);
+        emit Claimed(winnerAddress, abi.encodePacked(asset, winnerAddress, reward));
+    }
+```
+
+the code use block.prevrandao and block.timestamp as source of randoness to determine who is lucky to win the raffle.
+
+However, both op code are not good source of randonness.
+
+https://eips.ethereum.org/EIPS/eip-4399
+
+>  Security Considerations
+> The PREVRANDAO (0x44) opcode in PoS Ethereum (based on the beacon chain RANDAO implementation) is a source of randomness with different properties to the randomness supplied by BLOCKHASH (0x40) or DIFFICULTY (0x44) opcodes in the PoW network.
+
+ > Biasability
+> The beacon chain RANDAO implementation gives every block proposer 1 bit of influence power per slot. Proposer may deliberately refuse to propose a block on the opportunity cost of proposer and transaction fees to prevent beacon chain randomness (a RANDAO mix) from being updated in a particular slot.
+
+## Impact
+
+Miner can manipulate the block.prevrandao and block.timestamp to let specific address win the raffle
+
+## Code Snippet
+
+https://github.com/sherlock-audit/2024-06-boost-aa-wallet/blob/78930f2ed6570f30e356b5529bd4bcbe5194eb8b/boost-protocol/packages/evm/contracts/incentives/ERC20Incentive.sol#L137
+
+## Tool used
+
+Manual Review
+
+## Recommendation
+
+change randon generate method (can use chainlink VRF, etc...)
+
+# Issue M-2: Boost creator can collect all the fees by setting referralFee to 9_000 and give claimants his address as referrer_ address 
 
 Source: https://github.com/sherlock-audit/2024-06-boost-aa-wallet-judging/issues/158 
 
@@ -372,7 +312,52 @@ Set a maximum value for `BoostCore::referralFee` and refactor `BoostCore::create
 
 ```
 
-# Issue M-2: Budget allocation will break in case of a fee on transfer ERC 20 token 
+# Issue M-3: claimIncentiveFor Might Lead To Loss Of Funds For CGDA Incentive 
+
+Source: https://github.com/sherlock-audit/2024-06-boost-aa-wallet-judging/issues/178 
+
+## Found by 
+iamnmt, ke1caM, sakshamguruji
+## Summary
+
+The protocol has introduces a functionality to claim an incentive for other claimants , this would require data for the claim and according to the sponsor (asked in thread) -> `Signatures are available publicly by way of API` , so this way I can claim for someone else , it's a neat feature but for CGDA incentive can be disastrous.
+
+## Vulnerability Detail
+
+1.) Alice completes an action and for this action the incentive was a CGDAIncentive , the off chain mechanism verifies that Alice has performed the action successfully and grants her the claim , the claim as mentioned `Signatures are available publicly by way of API` 
+
+2.) Alice has a valid claim now for the CGDAIncentive , but she wants to wait for some time to claim since CGDA is dependent on lastClaimTime and she wants to maximise her gains , she wants to wait for 5 more blocks.
+
+https://github.com/sherlock-audit/2024-06-boost-aa-wallet/blob/main/boost-protocol/packages/evm/contracts/incentives/CGDAIncentive.sol#L124
+
+3.) Bob comes and claims the incentive for Alice earlier ->
+
+https://github.com/sherlock-audit/2024-06-boost-aa-wallet/blob/main/boost-protocol/packages/evm/contracts/BoostCore.sol#L164
+
+He does it such that Alice would get lesser incentive due to `uint256 timeSinceLastClaim = block.timestamp - cgdaParams.lastClaimTime;` being smaller than Alice intended and hence the rewards sent would be lesser
+
+https://github.com/sherlock-audit/2024-06-boost-aa-wallet/blob/main/boost-protocol/packages/evm/contracts/incentives/CGDAIncentive.sol#L123-L130
+
+4.) Alice lost her incentives , she wanted to claim after 5 blocks and make maximum gains , but Bob ruined her returns.
+
+
+## Impact
+
+Alice will get way lesser incentives than intended due to Bob claiming on her behalf.
+
+## Code Snippet
+
+https://github.com/sherlock-audit/2024-06-boost-aa-wallet/blob/main/boost-protocol/packages/evm/contracts/BoostCore.sol#L164
+
+## Tool used
+
+Manual Review
+
+## Recommendation
+
+Done let users cliam for other for such time dependent incentives.
+
+# Issue M-4: Budget allocation will break in case of a fee on transfer ERC 20 token 
 
 Source: https://github.com/sherlock-audit/2024-06-boost-aa-wallet-judging/issues/325 
 
@@ -464,45 +449,7 @@ This one is tricky since there are 2 paths the sponsor can take:
 1. Remove the support for fee on transfer tokens and mention this explicitly 
 2. Keep supporting fee on transfer tokens and remove the aforementioned check. 
 
-# Issue M-3: ERC20Incentive raffles can be gamed due to pseudorandomness 
-
-Source: https://github.com/sherlock-audit/2024-06-boost-aa-wallet-judging/issues/356 
-
-## Found by 
-0rpse, 0x539.eth, 0xSecuri, 0xbranded, 0xbrivan, 0xloophole, 4b, Atharv, Japy69, Okazaki, Pheonix, blutorque, ctf\_sec, denzi\_, frndz0ne, ge6a, haxagon, oxelmiguel, pwning\_dev, sakshamguruji, tinnohofficial
-## Summary
-ERC20Incentive raffle strategy uses pseudo randomness, users can compute the outcome of raffles and frontrun the drawRaffle function call to game raffles.
-## Vulnerability Detail
-Users can compute the outcome of raffles due to pseudorandomness used in raffles and frontrun the transaction of the owner to win raffles depending on the outcome. Note that users are able to sit on signatures as they do not include expiration.
-https://github.com/sherlock-audit/2024-06-boost-aa-wallet/blob/78930f2ed6570f30e356b5529bd4bcbe5194eb8b/boost-protocol/packages/evm/contracts/incentives/ERC20Incentive.sol#L137-L146
-```solidity
-    function drawRaffle() external override onlyOwner {
-        if (strategy != Strategy.RAFFLE) revert BoostError.Unauthorized();
-
-
-        LibPRNG.PRNG memory _prng = LibPRNG.PRNG({state: block.prevrandao + block.timestamp});
-
-
-        address winnerAddress = entries[_prng.next() % entries.length];
-
-
-        asset.safeTransfer(winnerAddress, reward);
-        emit Claimed(winnerAddress, abi.encodePacked(asset, winnerAddress, reward));
-    }
-```
-If a user tries to take an entry in the raffle right before owner calls this function, an attacker can choose to place their entry before or after the user's to game the raffle. 
-
-## Impact
-Raffles can be gamed.
-
-## Tool used
-
-Manual Review
-
-## Recommendation
-Use an oracle service to provide randomness.
-
-# Issue M-4: The incentive contracts are not compatible with rebasing/deflationary/inflationary tokens 
+# Issue M-5: The incentive contracts are not compatible with rebasing/deflationary/inflationary tokens 
 
 Source: https://github.com/sherlock-audit/2024-06-boost-aa-wallet-judging/issues/460 
 
