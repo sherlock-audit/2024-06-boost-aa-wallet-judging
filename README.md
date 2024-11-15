@@ -39,6 +39,16 @@ _No response_
 
 Owner should be specified in the init payload by the user similarly to how its done for the budget contracts [here](https://github.com/sherlock-audit/2024-06-boost-aa-wallet/blob/d9f597776cc2d20fbb19ffb1f7731126cf3b6210/boost-protocol/packages/evm/contracts/budgets/SimpleBudget.sol#L54)
 
+
+
+## Discussion
+
+**sherlock-admin2**
+
+The protocol team fixed this issue in the following PRs/commits:
+https://github.com/boostxyz/boost-protocol/pull/192
+
+
 # Issue H-2: IncentiveBits.setOrThrow() will revert, leading to a DoS 
 
 Source: https://github.com/sherlock-audit/2024-06-boost-aa-wallet-judging/issues/263 
@@ -98,9 +108,21 @@ function setOrThrow(IncentiveMap storage bitmap, bytes32 hash, uint256 incentive
 .
 ```
 
+
+
+## Discussion
+
+**sherlock-admin2**
+
+The protocol team fixed this issue in the following PRs/commits:
+https://github.com/rabbitholegg/boost-protocol/pull/138
+
+
 # Issue M-1: Both block.prevrandao and block.timestamp are not reliably source of randonness 
 
 Source: https://github.com/sherlock-audit/2024-06-boost-aa-wallet-judging/issues/106 
+
+The protocol has acknowledged this issue.
 
 ## Found by 
 0x539.eth, 0xSecuri, 0xloophole, 4b, Atharv, Japy69, Okazaki, Pheonix, ctf\_sec, denzi\_, ge6a, haxagon, oxelmiguel, pwning\_dev, sakshamguruji, tinnohofficial
@@ -312,9 +334,21 @@ Set a maximum value for `BoostCore::referralFee` and refactor `BoostCore::create
 
 ```
 
+
+
+## Discussion
+
+**sherlock-admin2**
+
+The protocol team fixed this issue in the following PRs/commits:
+https://github.com/boostxyz/boost-protocol/pull/197
+
+
 # Issue M-3: claimIncentiveFor Might Lead To Loss Of Funds For CGDA Incentive 
 
 Source: https://github.com/sherlock-audit/2024-06-boost-aa-wallet-judging/issues/178 
+
+The protocol has acknowledged this issue.
 
 ## Found by 
 iamnmt, ke1caM, sakshamguruji
@@ -360,6 +394,8 @@ Done let users cliam for other for such time dependent incentives.
 # Issue M-4: Budget allocation will break in case of a fee on transfer ERC 20 token 
 
 Source: https://github.com/sherlock-audit/2024-06-boost-aa-wallet-judging/issues/325 
+
+The protocol has acknowledged this issue.
 
 ## Found by 
 0xDemon, 0xbranded, 0xbrivan, 0xsome, 4b, AresAudits, Atharv, Aycozzynfada, DenTonylifer, Galturok, IvanFitro, Japy69, KungFuPanda, KupiaSec, MSK, MSaptarshi, MrCrowNFT, ParthMandale, Pheonix, TessKimy, dimulski, ge6a, haxagon, iamnmt, ihtishamsudo, nikhilx0111, oxelmiguel, sakshamguruji, tmotfl, y4y
@@ -452,6 +488,8 @@ This one is tricky since there are 2 paths the sponsor can take:
 # Issue M-5: The incentive contracts are not compatible with rebasing/deflationary/inflationary tokens 
 
 Source: https://github.com/sherlock-audit/2024-06-boost-aa-wallet-judging/issues/460 
+
+The protocol has acknowledged this issue.
 
 ## Found by 
 0xNirix, 0xbranded, 0xdeadbeef, Atharv, ZanyBonzy, denzi\_, ge6a, haxagon
